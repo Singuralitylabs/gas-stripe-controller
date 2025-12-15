@@ -13,7 +13,7 @@ function outputSessionInfo() {
 
     // セッション情報シートに未記載のセッション情報を抽出
     // 出力する情報：ID・日付・顧客名・案件名・金額
-    outputInfoArray = sessionInfoList.reduce((acc, sessionInfo) => {
+    const outputInfoArray = sessionInfoList.reduce((acc, sessionInfo) => {
       // セッションIDから関連するline_itemsを取得
       const {data: lineItemList} = getStripeInfo(`https://api.stripe.com/v1/checkout/sessions/${sessionInfo.id}/line_items`);
       const lineItem = lineItemList[0];

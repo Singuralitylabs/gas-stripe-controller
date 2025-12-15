@@ -6,6 +6,9 @@ function outputPaymentInfo() {
     // Stripeサーバーから支払い情報を取得
     const {data: paymentInfoList} = getStripeInfo("https://api.stripe.com/v1/payment_intents?limit=100");
 
+    // Stripeサーバーから顧客情報を取得
+    const { data: customerInfoList } = getStripeInfo("https://api.stripe.com/v1/customers?limit=100");
+
     // 支払い情報シートの最新登録日を取得（B2セルの日付が最新）
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const outputSheet = ss.getSheetByName("支払い情報");
