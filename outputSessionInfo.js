@@ -25,8 +25,6 @@ function outputSessionInfo() {
 
       return [...acc, infoList];
     }, []);
-    console.log(outputInfoArray);
-
     // 新規の取引情報がない場合、終了
     if (outputInfoArray.length === 0) {
       console.log("新しい取引情報はありません。");
@@ -37,6 +35,9 @@ function outputSessionInfo() {
     outputSheet.insertRows(2, outputInfoArray.length);
     outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
   } catch(err) {
-    console.error(`エラー内容：${err}`);
+    console.error(`エラー内容：${err.message}\nスタック：${err.stack}`);
+    const gasUrl = `https://script.google.com/u/0/home/projects/${ScriptApp.getScriptId()}/edit`;
+    SlackNotification.SendToSinlabSlack(`StripeControllerのoutputSessionInfo関数でエラーが発生しました。\n${err.message}\n${err.stack}\n\n${gasUrl}`, "通知担当", "テスト用");
+    throw err;
   }
 }

@@ -3,11 +3,10 @@
  */
 function outputChargeInfo() {
   try {
-    // Stripeサーバーから取引情報を取得
-    const { data: chargeInfoList } = getStripeInfo("https://api.stripe.com/v1/charges?limit=200");
+    // Stripeサーバーから取引情報を取得（関連データもexpandで一緒に取得して効率化）
+    const { data: chargeInfoList } = getStripeInfo("https://api.stripe.com/v1/charges?limit=200&expand[]=data.customer&expand[]=data.invoice");
 
-    // Stripeサーバーから顧客情報を取得
-    const { data: customerInfoList } = getStripeInfo("https://api.stripe.com/v1/customers?limit=100");
+    // 顧客情報はexpandで取得するため、別途取得は不要
 
     // 取引情報シートの最新登録日を取得（B2セルの日付が最新）
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -20,18 +19,27 @@ function outputChargeInfo() {
       const createdDate = new Date(chargeInfo.created * 1000); // 取得日時をUNIX日時から変換
       if (createdDate.getTime() <= latestDate.getTime()) return acc;
 
-      // 顧客情報を取得
-      const targetCustomerInfo = customerInfoList.find((customerInfo) => customerInfo.id == chargeInfo.customer);
-      const customerName = targetCustomerInfo ? targetCustomerInfo.name : "";
+      // 顧客情報を取得（expandで展開済み）
+      const customerName = chargeInfo.customer && typeof chargeInfo.customer === 'object'
+        ? chargeInfo.customer.name
+        : "";
 
       // 取引した商品名を取得
       let productName = "";
+
+      // payment_intentから商品名を取得（追加API呼び出しが必要）
       if (chargeInfo.payment_intent) {
-        productName = getProductNameByPaymentIntentId(chargeInfo.payment_intent);
+        const paymentIntentId = typeof chargeInfo.payment_intent === 'object'
+          ? chargeInfo.payment_intent.id
+          : chargeInfo.payment_intent;
+        productName = getProductNameByPaymentIntentId(paymentIntentId);
       }
+
+      // invoiceから商品名を取得（expandで展開済み）
       if (!productName && chargeInfo.invoice) {
-        const invoiceInfo = getStripeInfo(`https://api.stripe.com/v1/invoices/${chargeInfo.invoice}`);
-        productName = invoiceInfo.lines.data[0].description;
+        if (typeof chargeInfo.invoice === 'object' && chargeInfo.invoice.lines && chargeInfo.invoice.lines.data && chargeInfo.invoice.lines.data.length > 0) {
+          productName = chargeInfo.invoice.lines.data[0].description;
+        }
       }
 
       // タイムスタンプ・ID・顧客名・商品名・説明文・金額・決済方法・ステータスを出力
@@ -49,9 +57,10 @@ function outputChargeInfo() {
     outputSheet.insertRows(2, outputInfoArray.length);
     outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
   } catch(err) {
-    console.error(`エラー内容：${err}`);
+    console.error(`エラー内容：${err.message}\nスタック：${err.stack}`);
     const gasUrl = `https://script.google.com/u/0/home/projects/${ScriptApp.getScriptId()}/edit`;
-    SlackNotification.SendToSinlabSlack(`StripeControllerのoutputChargeInfo関数でエラーが発生しました。\n${err.message}\n\n${gasUrl}`, "通知担当", "テスト用");
+    SlackNotification.SendToSinlabSlack(`StripeControllerのoutputChargeInfo関数でエラーが発生しました。\n${err.message}\n${err.stack}\n\n${gasUrl}`, "通知担当", "テスト用");
+    throw err;  // トリガーの再試行を有効にするため
   }
 }
 
