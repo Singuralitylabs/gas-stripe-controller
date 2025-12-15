@@ -1,7 +1,7 @@
 /**
  * Stripeの支払い情報をシートに出力する
  */
-const outputPaymentInfo = () => {
+function outputPaymentInfo() {
   try {
     // Stripeサーバーから支払い情報を取得
     const {data: paymentInfoList} = getStripeInfo("https://api.stripe.com/v1/payment_intents?limit=100");

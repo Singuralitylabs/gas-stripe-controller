@@ -1,7 +1,7 @@
 /**
  * Stripeの取引情報をシートに出力する
  */
-const outputChargeInfo = () => {
+function outputChargeInfo() {
   try {
     // Stripeサーバーから取引情報を取得
     const { data: chargeInfoList } = getStripeInfo("https://api.stripe.com/v1/charges?limit=200");

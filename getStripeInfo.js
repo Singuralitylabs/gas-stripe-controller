@@ -1,7 +1,7 @@
 /**
  * Stripeサーバーから指定のURLの情報を取得する
  */
-const getStripeInfo = (url) => {
+function getStripeInfo (url) {
   // APIキーを取得
   const apiKey = PropertiesService.getScriptProperties().getProperty("SECRET_KEY");
 

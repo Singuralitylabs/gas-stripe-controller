@@ -1,7 +1,7 @@
 /**
  * Stripeの取引情報をシートに出力する
  */
-const outputSessionInfo = () => {
+function outputSessionInfo() {
   try {
     // Stripeサーバーからセッション情報を取得
     const {data: sessionInfoList} = getStripeInfo("https://api.stripe.com/v1/checkout/sessions");
@@ -27,15 +27,15 @@ const outputSessionInfo = () => {
     }, []);
     console.log(outputInfoArray);
 
-    // // 新規の取引情報がない場合、終了
-    // if (outputInfoArray.length === 0) {
-    //   console.log("新しい取引情報はありません。");
-    //   return;
-    // }
+    // 新規の取引情報がない場合、終了
+    if (outputInfoArray.length === 0) {
+      console.log("新しい取引情報はありません。");
+      return;
+    }
 
-    // // 取引情報をシートに追加（シートの冒頭に追加）
-    // outputSheet.insertRows(2, outputInfoArray.length);
-    // outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
+    // 取引情報をシートに追加（シートの冒頭に追加）
+    outputSheet.insertRows(2, outputInfoArray.length);
+    outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
   } catch(err) {
     console.error(`エラー内容：${err}`);
   }

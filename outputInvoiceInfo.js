@@ -1,7 +1,7 @@
 /**
  * Stripeの請求書情報をシートに出力する
  */
-const outputInvoiceInfo = () => {
+function outputInvoiceInfo() {
   try {
     // Stripeサーバーから請求書情報を取得
     const { data: invoiceInfoList } = getStripeInfo("https://api.stripe.com/v1/invoices?limit=200");
