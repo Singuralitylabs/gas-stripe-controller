@@ -73,8 +73,20 @@ function handleError(err, functionName) {
  */
 function buildStripeUrl(endpoint, params = {}) {
   const url = CONFIG.STRIPE_API.BASE_URL + endpoint;
-  const queryParams = Object.keys(params)
-    .map(key => `${key}=${encodeURIComponent(params[key])}`)
-    .join('&');
-  return queryParams ? `${url}?${queryParams}` : url;
+  const queryParts = [];
+
+  Object.keys(params).forEach(key => {
+    const value = params[key];
+
+    // 配列の場合は各要素を個別のパラメータとして追加
+    if (Array.isArray(value)) {
+      value.forEach(item => {
+        queryParts.push(`${key}=${encodeURIComponent(item)}`);
+      });
+    } else {
+      queryParts.push(`${key}=${encodeURIComponent(value)}`);
+    }
+  });
+
+  return queryParts.length > 0 ? `${url}?${queryParts.join('&')}` : url;
 }
