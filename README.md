@@ -1,254 +1,345 @@
-gas-stripe-controller
-=====================
+# gas-stripe-controller
 
-Stripe の支払い・請求・セッションなどの情報を、Google Apps Script（GAS）を使って取得し、スプレッドシートなどに出力するためのスクリプト群です。
+Stripe API連携によるデータ取得・Google スプレッドシート出力システム
 
 ## 概要
 
-このプロジェクトは、Stripe API から各種決済情報を取得し、Google スプレッドシートに自動的に出力するための GAS スクリプトです。各関数は最新のデータのみを取得し、既存のデータと重複しないように管理します。
+このプロジェクトは、Stripe APIから各種データ（取引、請求書、支払い、セッション、入金）を取得し、Google スプレッドシートに自動出力するGoogle Apps Script（GAS）ベースのシステムです。
 
-## 特徴
+## 機能一覧
 
-- ✅ **API効率化**: Stripe API の expand パラメータを活用し、API呼び出し回数を最大66%削減
-- ✅ **堅牢なエラーハンドリング**: 統一されたエラー処理とSlack通知による監視
-- ✅ **保守性の高い設計**: 設定の一元管理、共通関数化により保守性を向上
-- ✅ **重複防止**: タイムスタンプベースの厳密な重複チェック
-- ✅ **clasp対応**: ローカル開発環境でのコーディングとバージョン管理に対応
+### 実装済み機能
+
+1. **取引情報取得** (`outputChargeInfo.js`)
+   - Charges APIからの取引データ取得
+   - 顧客情報の展開取得
+   - 商品名の複数ソースからの取得
+
+2. **請求書情報取得** (`outputInvoiceInfo.js`)
+   - Invoices APIからの請求書データ取得
+
+3. **支払い情報取得** (`outputPaymentInfo.js`)
+   - Payment Intents APIからの支払いデータ取得
+
+4. **セッション情報取得** (`outputSessionInfo.js`)
+   - Checkout Sessions APIからのセッションデータ取得
+
+5. **入金情報取得** (`outputPayoutInfo.js`) **NEW**
+   - Payouts APIからの入金データ取得
+   - Balance Transactions APIによる取引明細の取得
+   - ページネーション対応による全データ取得
+   - 期間指定での入金データ取得
 
 ## ファイル構成
 
-### コアファイル
+```
+stripe-controller/
+├── config.js                  # 設定ファイル（シート名、API設定など）
+├── utils.js                   # 共通ユーティリティ関数
+├── getStripeInfo.js           # Stripe API呼び出し基盤
+├── outputChargeInfo.js        # 取引情報出力
+├── outputInvoiceInfo.js       # 請求書情報出力
+├── outputPaymentInfo.js       # 支払い情報出力
+├── outputSessionInfo.js       # セッション情報出力
+├── outputPayoutInfo.js        # 入金情報出力 NEW
+├── test.js                    # テスト関数集
+├── docs/
+│   └── payout.md             # 入金システム仕様書
+└── README.md                 # このファイル
+```
 
-#### `config.js`
-- **機能**: プロジェクト全体の設定を一元管理
-- **内容**:
-  - シート名の定数（`SHEETS.CHARGE`, `SHEETS.INVOICE`等）
-  - セル位置の定数（最新日付セル、挿入位置）
-  - Stripe APIのリミット値とエンドポイント
-  - Slack通知設定
+## セットアップ
 
-#### `utils.js`
-- **機能**: 共通ユーティリティ関数群
-- **主な関数**:
-  - `getLatestDate(sheetName)`: 最新日付を取得
-  - `outputToSheet(sheetName, dataArray)`: スプレッドシートにデータを出力
-  - `unixToDate(unixTime)`: UNIX時刻をDateオブジェクトに変換
-  - `getCustomerName(customer)`: 顧客名を取得（expand対応）
-  - `handleError(err, functionName)`: 統一されたエラーハンドリング
-  - `buildStripeUrl(endpoint, params)`: Stripe API URLを構築
+### 1. Stripe APIキーの設定
 
-#### `getStripeInfo.js`
-- **機能**: Stripe API から情報を取得する共通関数
-- **処理内容**:
-  - スクリプトプロパティから Stripe のシークレットキー（`SECRET_KEY`）を取得・検証
-  - Bearer トークン認証で Stripe API にリクエストを送信
-  - HTTPステータスコードの検証（200以外はエラー）
-  - 詳細なエラーログ記録
-  - レスポンスを JSON 形式で返却
+Google Apps Scriptのスクリプトプロパティに以下を設定:
 
-### データ出力関数
+```
+SECRET_KEY: sk_live_... または sk_test_...
+```
 
-#### `outputChargeInfo.js`
-- **機能**: Stripe の取引情報（Charges）をスプレッドシートに出力
-- **処理内容**:
-  - Stripe API から取引情報（最大200件）を取得（`expand` パラメータで顧客・請求書情報も同時取得）
-  - 「取引情報」シートの B2 セルの日付以降の新しい取引のみを抽出
-  - 各取引について、商品名を `payment_intent` または `invoice` から取得
-  - 出力項目: ID、作成日時、顧客名、商品名、説明文、金額、決済方法、ステータス
-  - 新しいデータをシートの2行目に挿入
-  - エラー発生時は Slack に通知し、例外を再スロー
-- **API効率化**: expand パラメータにより最大401回のAPI呼び出しを削減（66%削減）
+設定方法:
+1. GASエディタで「プロジェクトの設定」を開く
+2. 「スクリプトプロパティ」セクションで「プロパティを追加」
+3. プロパティ名: `SECRET_KEY`、値: StripeのSecret Key
 
-#### `outputInvoiceInfo.js`
-- **機能**: Stripe の請求書情報（Invoices）をスプレッドシートに出力
-- **処理内容**:
-  - Stripe API から請求書情報（最大200件）を取得
-  - 「請求書情報」シートの B2 セルの日付以降の新しい請求書のみを抽出
-  - 支払い済み（`paid=true`）の請求書のみを対象
-  - 出力項目: ID、請求日、顧客名、説明文、金額、ステータス
-  - 新しいデータをシートの2行目に挿入
-  - エラー発生時は Slack に通知し、例外を再スロー
+### 2. Google スプレッドシートの準備
 
-#### `outputPaymentInfo.js`
-- **機能**: Stripe の支払い情報（Payment Intents）をスプレッドシートに出力
-- **処理内容**:
-  - Stripe API から支払い情報（最大100件）を取得（`expand` パラメータで顧客情報も同時取得）
-  - 「支払い情報」シートの B2 セルの日付以降の新しい支払いのみを抽出
-  - 出力項目: ID、作成日時、顧客名、説明文、金額、ステータス
-  - 新しいデータをシートの2行目に挿入
-  - エラー発生時は Slack に通知し、例外を再スロー
-- **API効率化**: expand パラメータにより最大100回のAPI呼び出しを削減（50%削減）
+以下のシート名でシートを作成:
 
-#### `outputSessionInfo.js`
-- **機能**: Stripe のセッション情報（Checkout Sessions）をスプレッドシートに出力
-- **処理内容**:
-  - Stripe API からセッション情報を取得
-  - 各セッションの `line_items` を取得して商品情報を取得
-  - 「セッション情報」シートの B2 セルの日付以降の新しいセッションのみを抽出
-  - 出力項目: ID、作成日時、顧客ID、案件名、金額
-  - 新しいデータをシートの2行目に挿入
-  - エラー発生時は Slack に通知し、例外を再スロー
-
-## セットアップ手順
-
-### 1. 必要な準備
-
-#### 1.1 Stripe API キーの取得
-1. [Stripe Dashboard](https://dashboard.stripe.com/) にログイン
-2. 開発者モードで「API キー」を開く
-3. 「シークレットキー」をコピー（`sk_test_...` または `sk_live_...`）
-
-#### 1.2 Google スプレッドシートの準備
-以下のシート名でスプレッドシートを作成してください：
 - `取引情報`
 - `請求書情報`
 - `支払い情報`
 - `セッション情報`
+- `入金情報` (NEW)
 
-各シートの2行目（B2セル）に最新の日付を設定してください。この日付以降のデータのみが取得されます。
+各シートには以下の共通設定が必要:
+- 2行目、B列（B2セル）: 最新登録日（日付型）
+- 1行目: ヘッダー行
 
-#### 1.3 GAS プロジェクトの作成
+#### 入金情報シートのヘッダー構成
 
-**方法A: clasp を使用（推奨）**
+| 列 | 項目名 | 内容 |
+|----|--------|------|
+| A | 入金ID | Stripe Payout ID |
+| B | 入金日 | 入金到着日 |
+| C | 入金額 | 入金総額（最小通貨単位） |
+| D | 取引ID | Balance Transaction ID |
+| E | 取引種別 | charge, refund, stripe_fee, payout, adjustment など |
+| F | 総額 | 取引総額 |
+| G | 手数料 | Stripe手数料 |
+| H | 純額 | 手数料差し引き後の金額 |
+| I | 通貨 | jpy, usd など |
+| J | 取引日時 | 取引発生日時 |
+| K | 説明 | 取引の説明文 |
 
-```bash
-# claspをインストール（未インストールの場合）
-npm install -g @google/clasp
+## 使用方法
 
-# Googleアカウントでログイン
-clasp login
+### 基本的な実行
 
-# 既存プロジェクトをクローン
-clasp clone 1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+各関数を手動またはトリガーで実行:
 
-# または、新規プロジェクトを作成
-clasp create --type standalone --title "Stripe Controller"
+```javascript
+// 入金情報を取得
+outputPayoutInfo();
 
-# ローカルで編集後、GASにプッシュ
-clasp push
-
-# GASエディタを開く
-clasp open
+// その他のデータ取得
+outputChargeInfo();
+outputInvoiceInfo();
+outputPaymentInfo();
+outputSessionInfo();
 ```
 
-**方法B: 手動セットアップ**
+### 期間指定での入金取得
 
-1. 上記のスプレッドシートを開く
-2. 「拡張機能」→「Apps Script」を選択
-3. このリポジトリのすべてのファイル（`*.js`, `appsscript.json`）をコピー＆ペースト
-4. 以下のファイルを作成してください：
-   - `config.js`
-   - `utils.js`
-   - `getStripeInfo.js`
-   - `outputChargeInfo.js`
-   - `outputInvoiceInfo.js`
-   - `outputPaymentInfo.js`
-   - `outputSessionInfo.js`
-
-### 2. 設定
-
-#### 2.1 Stripe API キーの設定
-1. GAS エディタで「プロジェクトの設定」（歯車アイコン）を開く
-2. 「スクリプト プロパティ」セクションで「スクリプト プロパティを追加」をクリック
-3. プロパティ名: `SECRET_KEY`、値: Stripe のシークレットキーを入力
-4. 「保存」をクリック
-
-#### 2.2 Slack 通知ライブラリの設定（エラー通知用）
-- ライブラリ ID: `1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
-- `appsscript.json` に既に設定済みです
-- 開発モードで使用する場合は、ライブラリの最新バージョンに更新してください
-
-### 3. 実行方法
-
-各関数を手動で実行するか、トリガーを設定して自動実行できます。
-
-#### 手動実行
-
-**clasp を使用する場合:**
-```bash
-# 関数を実行
-clasp run outputChargeInfo
-
-# ログを確認
-clasp logs
-
-# リアルタイムログ監視
-clasp logs --watch
+```javascript
+// 特定期間の入金データを取得
+const startDate = new Date('2024-01-01');
+const endDate = new Date('2024-01-31');
+outputPayoutInfoByDateRange(startDate, endDate);
 ```
 
-**GASエディタを使用する場合:**
-1. GAS エディタで関数名を選択
-2. 「実行」ボタンをクリック
-3. 初回実行時は権限の承認が必要です
+### トリガー設定（推奨）
 
-#### 自動実行（トリガー設定）
-1. GAS エディタで「トリガー」（時計アイコン）を開く
+定期実行を設定する場合:
+
+1. GASエディタで「トリガー」を開く
 2. 「トリガーを追加」をクリック
-3. 実行する関数、イベントのソース（時間主導型）、時間ベースのトリガーのタイプ（例: 1時間ごと）を設定
-4. 「保存」をクリック
+3. 実行する関数を選択（例: `outputPayoutInfo`）
+4. イベントのソース: 「時間主導型」
+5. 時間ベースのトリガーのタイプ: 「日付ベースのタイマー」または「時間ベースのタイマー」
+6. 時刻を選択
 
-## 開発とデバッグ
+## テスト
 
-### ローカル開発ワークフロー
+### テスト関数の実行
 
-```bash
-# 1. ローカルで編集（VS Code等）
+安全にテストするためのDry Run関数を提供:
 
-# 2. GASにプッシュ
-clasp push
+```javascript
+// 設定確認
+testConfig();
 
-# 3. テスト実行
-clasp run outputChargeInfo
+// ユーティリティ関数のテスト
+testUtils();
 
-# 4. ログ確認
-clasp logs
+// Stripe API接続テスト
+testStripeConnectionSmall();
 
-# 5. 問題なければコミット
-git add .
-git commit -m "fix: 機能改善"
+// 入金API接続テスト
+testPayoutsConnectionSmall();
+
+// Balance Transactions API接続テスト
+testBalanceTransactionsConnection();
+
+// ページネーション機能のテスト
+testFetchAllBalanceTransactions();
+
+// 入金データ取得のDry Run（書き込みなし）
+testOutputPayoutInfoDryRun();
+
+// 期間指定テスト
+testPayoutsByDateRange();
+
+// その他のDry Run
+testOutputChargeInfoDryRun();
 ```
-## 注意事項
 
-### API制限
-- Stripe API のレート制限: デフォルトでは1秒あたり100リクエスト
-- 大量データ処理時は、APIレート制限に注意してください
-- expand パラメータの活用により、制限に抵触するリスクを大幅に軽減
+### テストの推奨実行順序
 
-### データ管理
-- 各関数は最新のデータのみを取得するため、初回実行時は B2 セルに古い日付を設定することを推奨します
-- 同一タイムスタンプのデータは重複登録されません（厳密な日付比較を実装）
+1. `testConfig()` - 設定値の確認
+2. `testUtils()` - ユーティリティ関数の動作確認
+3. `testPayoutsConnectionSmall()` - Payouts API接続確認
+4. `testBalanceTransactionsConnection()` - Balance Transactions API接続確認
+5. `testFetchAllBalanceTransactions()` - ページネーション機能確認
+6. `testOutputPayoutInfoDryRun()` - 本番実行前の最終確認
 
-### エラー処理
-- すべてのエラーは Slack に通知されます（SlackNotification ライブラリが必要）
-- トリガー実行時のエラーは例外を再スローし、GASの自動再試行を有効化しています
-- エラーログにはスタックトレースが含まれ、デバッグが容易です
+## 入金システムの技術詳細
 
-### セキュリティ
-- Stripe APIキー（`SECRET_KEY`）はスクリプトプロパティに安全に保存してください
-- 本番環境では `sk_live_...` キーを、テスト環境では `sk_test_...` キーを使用してください
-- APIキーをコードに直接記述しないでください
+### アーキテクチャ
+
+入金システムは2つのStripe APIを組み合わせて使用:
+
+1. **Payouts API** - 入金の基本情報を取得
+2. **Balance Transactions API** - 各入金に紐づく取引明細を取得
+
+### データフロー
+
+```
+1. Payouts API呼び出し
+   ↓
+2. 入金リスト取得（ページネーション対応）
+   ↓
+3. 各入金について:
+   a. Balance Transactions API呼び出し
+   b. 取引明細を全件取得（ページネーション対応）
+   c. スプレッドシート出力配列に追加
+   ↓
+4. 一括でスプレッドシートに出力
+```
+
+### ページネーション処理
+
+Stripe APIは大量データを返す際にページネーションを使用します。本実装は以下の方法で全データを取得:
+
+```javascript
+// Balance Transactions取得時のページネーション例
+let hasMore = true;
+let startingAfter = null;
+
+while (hasMore) {
+  const params = {
+    payout: payoutId,
+    limit: 100
+  };
+
+  if (startingAfter) {
+    params.starting_after = startingAfter;
+  }
+
+  const response = getStripeInfo(buildStripeUrl(endpoint, params));
+
+  // データ処理
+  allTransactions.push(...response.data);
+
+  // 次ページの有無確認
+  hasMore = response.has_more;
+
+  if (hasMore) {
+    startingAfter = response.data[response.data.length - 1].id;
+  }
+}
+```
+
+### エラーハンドリング
+
+すべての関数は統一されたエラーハンドリングを実装:
+
+1. try-catch でエラーをキャッチ
+2. 詳細なエラーログを出力
+3. Slack通知を送信（オプション）
+4. エラーを再スロー（実行停止）
+
+```javascript
+try {
+  // メイン処理
+} catch(err) {
+  handleError(err, "functionName");
+}
+```
+
+### 型安全性
+
+すべてのStripe APIレスポンスはTypeScriptの型定義に準拠:
+
+- `Stripe.Payout` - 入金オブジェクト
+- `Stripe.BalanceTransaction` - 取引明細オブジェクト
+- UNIX時刻は `unixToDate()` で自動的にDateオブジェクトに変換
+
+## パフォーマンスとベストプラクティス
+
+### API呼び出しの最適化
+
+1. **リミット設定**: APIリミット値は `config.js` で管理
+2. **Expand機能**: 関連データを1回の呼び出しで取得（該当する場合）
+3. **ページネーション**: 大量データを効率的に取得
+4. **エラーリトライ**: HTTPエラー時の再試行ロジック（`muteHttpExceptions: true`）
+
+### レート制限対策
+
+Stripe APIにはレート制限があります:
+
+- テストモード: 100 requests/秒
+- 本番モード: アカウントにより異なる
+
+大量データ処理時は以下を考慮:
+
+1. バッチ処理のサイズ調整
+2. `Utilities.sleep()` による遅延挿入
+3. エラー発生時の指数バックオフ
+
+### データ整合性
+
+- 最新登録日（B2セル）による重複防止
+- トランザクション単位での一括書き込み
+- エラー時のロールバック考慮（手動）
 
 ## トラブルシューティング
 
-### よくある問題
+### よくあるエラー
 
-#### 1. "SECRET_KEYが設定されていません" エラー
-**原因**: スクリプトプロパティにAPIキーが未設定
-**解決**: GASエディタの「プロジェクトの設定」→「スクリプト プロパティ」で `SECRET_KEY` を設定
+**1. "SECRET_KEYがスクリプトプロパティに設定されていません"**
+- 解決: スクリプトプロパティにStripe Secret Keyを設定
 
-#### 2. "Stripe API error (401)" エラー
-**原因**: APIキーが無効または権限不足
-**解決**: Stripe DashboardでAPIキーを確認し、正しいキーを設定
+**2. "Stripe API error (401)"**
+- 解決: APIキーが正しいか確認（test/live環境の違いも確認）
 
-#### 3. "Stripe API error (429)" エラー
-**原因**: APIレート制限に到達
-**解決**: 実行頻度を下げるか、データ取得量を減らす
+**3. "Stripe API error (404)"**
+- 解決: 指定したリソースが存在するか確認（Payout ID など）
 
-#### 4. データが重複する
-**原因**: B2セルの日付設定が不適切
-**解決**: B2セルに正しい最新日付を設定。日付比較は厳密（`<`）なので、同一タイムスタンプは重複しません
+**4. シートが見つからないエラー**
+- 解決: `config.js` のシート名と実際のシート名が一致するか確認
 
-#### 5. clasp push でエラー
-**原因**: `.clasp.json` の設定または認証の問題
-**解決**: `clasp login` で再認証、または `.clasp.json` の `scriptId` を確認
+**5. データが重複する**
+- 解決: 各シートのB2セルに正しい最新日付が設定されているか確認
 
+### デバッグ方法
+
+1. **ログ確認**: GASエディタの「実行ログ」でconsole.logの出力を確認
+2. **Dry Run**: `testOutputPayoutInfoDryRun()` で書き込み前にデータ確認
+3. **少量テスト**: `limit: 1` でAPI呼び出しを最小化してテスト
+4. **ステップ実行**: 各API呼び出しを個別にテストする関数を使用
+
+## セキュリティ
+
+### 重要事項
+
+1. **Secret Keyの管理**:
+   - スクリプトプロパティに保存（コードに直接記述しない）
+   - Gitリポジトリにコミットしない
+   - 定期的にローテーション
+
+2. **アクセス制御**:
+   - GASプロジェクトのアクセス権限を適切に管理
+   - スプレッドシートの共有設定を確認
+
+3. **監査ログ**:
+   - Slack通知でエラーを監視
+   - 定期的なログレビュー
+
+## ライセンス
+
+このプロジェクトは内部使用を目的としています。
+
+## 変更履歴
+
+### v1.1.0 (2024-XX-XX)
+- 入金情報取得機能の追加 (`outputPayoutInfo.js`)
+- Balance Transactions APIの実装
+- ページネーション対応の強化
+- 期間指定での入金取得機能
+- 包括的なテスト関数の追加
+
+### v1.0.0
+- 初期リリース
+- 取引、請求書、支払い、セッション情報取得機能

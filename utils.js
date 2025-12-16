@@ -10,7 +10,28 @@
 function getLatestDate(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
-  return new Date(sheet.getRange(CONFIG.CELLS.LATEST_DATE_ROW, CONFIG.CELLS.LATEST_DATE_COLUMN).getValue());
+
+  // シートが存在しない場合のエラーチェック
+  if (!sheet) {
+    throw new Error(`シート「${sheetName}」が見つかりません。スプレッドシートにシートを作成してください。`);
+  }
+
+  const cellValue = sheet.getRange(CONFIG.CELLS.LATEST_DATE_ROW, CONFIG.CELLS.LATEST_DATE_COLUMN).getValue();
+
+  // セルが空の場合はデフォルト日付（1970-01-01）を返す
+  if (!cellValue) {
+    console.warn(`${sheetName}シートのB2セルが空です。デフォルト日付（1970-01-01）を使用します。`);
+    return new Date(0); // Unix epoch
+  }
+
+  const date = new Date(cellValue);
+
+  // 日付が無効な場合のエラーチェック
+  if (isNaN(date.getTime())) {
+    throw new Error(`${sheetName}シートのB2セルの値「${cellValue}」は有効な日付ではありません。日付形式（例: 2024-01-01）で入力してください。`);
+  }
+
+  return date;
 }
 
 /**

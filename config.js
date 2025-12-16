@@ -9,7 +9,8 @@ const CONFIG = {
     CHARGE: "取引情報",
     INVOICE: "請求書情報",
     PAYMENT: "支払い情報",
-    SESSION: "セッション情報"
+    SESSION: "セッション情報",
+    PAYOUT: "入金情報"
   },
 
   // セル位置
@@ -24,7 +25,9 @@ const CONFIG = {
     CHARGE: 200,
     CUSTOMER: 100,
     INVOICE: 200,
-    PAYMENT: 100
+    PAYMENT: 100,
+    PAYOUT: 100,
+    BALANCE_TRANSACTION: 100
   },
 
   // Stripe APIのベースURL
@@ -35,7 +38,9 @@ const CONFIG = {
       CUSTOMERS: "/customers",
       INVOICES: "/invoices",
       PAYMENT_INTENTS: "/payment_intents",
-      CHECKOUT_SESSIONS: "/checkout/sessions"
+      CHECKOUT_SESSIONS: "/checkout/sessions",
+      PAYOUTS: "/payouts",
+      BALANCE_TRANSACTIONS: "/balance_transactions"
     }
   },
 
