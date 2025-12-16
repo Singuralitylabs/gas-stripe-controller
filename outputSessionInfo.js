@@ -4,40 +4,31 @@
 function outputSessionInfo() {
   try {
     // Stripeサーバーからセッション情報を取得
-    const {data: sessionInfoList} = getStripeInfo("https://api.stripe.com/v1/checkout/sessions");
+    const url = buildStripeUrl(CONFIG.STRIPE_API.ENDPOINTS.CHECKOUT_SESSIONS, {});
+    const {data: sessionInfoList} = getStripeInfo(url);
 
-    // 取引情報シートの最新登録日を取得（B2セルの日付が最新）
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const outputSheet = ss.getSheetByName("セッション情報");
-    const latestDate = new Date(outputSheet.getRange(2, 2).getValue());
+    // 取引情報シートの最新登録日を取得
+    const latestDate = getLatestDate(CONFIG.SHEETS.SESSION);
 
     // セッション情報シートに未記載のセッション情報を抽出
     // 出力する情報：ID・日付・顧客名・案件名・金額
     const outputInfoArray = sessionInfoList.reduce((acc, sessionInfo) => {
       // セッションIDから関連するline_itemsを取得
-      const {data: lineItemList} = getStripeInfo(`https://api.stripe.com/v1/checkout/sessions/${sessionInfo.id}/line_items`);
+      const lineItemsUrl = `${CONFIG.STRIPE_API.BASE_URL}${CONFIG.STRIPE_API.ENDPOINTS.CHECKOUT_SESSIONS}/${sessionInfo.id}/line_items`;
+      const {data: lineItemList} = getStripeInfo(lineItemsUrl);
       const lineItem = lineItemList[0];
 
-      const date = new Date(lineItem.price.created * 1000); // 取得日時をUNIX日時から変換
-      if (date.getTime() <= latestDate.getTime()) return acc;
+      const date = unixToDate(lineItem.price.created);
+      if (date.getTime() < latestDate.getTime()) return acc;
 
       const infoList = [sessionInfo.id, date, sessionInfo.customer, lineItem.description, lineItem.amount_total];
 
       return [...acc, infoList];
     }, []);
-    // 新規の取引情報がない場合、終了
-    if (outputInfoArray.length === 0) {
-      console.log("新しい取引情報はありません。");
-      return;
-    }
 
-    // 取引情報をシートに追加（シートの冒頭に追加）
-    outputSheet.insertRows(2, outputInfoArray.length);
-    outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
+    // セッション情報をシートに追加
+    outputToSheet(CONFIG.SHEETS.SESSION, outputInfoArray);
   } catch(err) {
-    console.error(`エラー内容：${err.message}\nスタック：${err.stack}`);
-    const gasUrl = `https://script.google.com/u/0/home/projects/${ScriptApp.getScriptId()}/edit`;
-    SlackNotification.SendToSinlabSlack(`StripeControllerのoutputSessionInfo関数でエラーが発生しました。\n${err.message}\n${err.stack}\n\n${gasUrl}`, "通知担当", "テスト用");
-    throw err;
+    handleError(err, "outputSessionInfo");
   }
 }

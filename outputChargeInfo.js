@@ -4,25 +4,23 @@
 function outputChargeInfo() {
   try {
     // Stripeサーバーから取引情報を取得（関連データもexpandで一緒に取得して効率化）
-    const { data: chargeInfoList } = getStripeInfo("https://api.stripe.com/v1/charges?limit=200&expand[]=data.customer&expand[]=data.invoice");
+    const url = buildStripeUrl(CONFIG.STRIPE_API.ENDPOINTS.CHARGES, {
+      limit: CONFIG.STRIPE_LIMITS.CHARGE,
+      'expand[]': ['data.customer', 'data.invoice']
+    });
+    const { data: chargeInfoList } = getStripeInfo(url);
 
-    // 顧客情報はexpandで取得するため、別途取得は不要
-
-    // 取引情報シートの最新登録日を取得（B2セルの日付が最新）
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const outputSheet = ss.getSheetByName("取引情報");
-    const latestDate = new Date(outputSheet.getRange(2, 2).getValue());
+    // 取引情報シートの最新登録日を取得
+    const latestDate = getLatestDate(CONFIG.SHEETS.CHARGE);
 
     // 取引情報シートに未記載の取引情報を抽出
     const outputInfoArray = chargeInfoList.reduce((acc, chargeInfo) => {
-      // 既にシートに記載済みの情報をスキップ
-      const createdDate = new Date(chargeInfo.created * 1000); // 取得日時をUNIX日時から変換
-      if (createdDate.getTime() <= latestDate.getTime()) return acc;
+      // 既にシートに記載済みの情報をスキップ（日付が古いものは除外）
+      const createdDate = unixToDate(chargeInfo.created);
+      if (createdDate.getTime() < latestDate.getTime()) return acc;
 
       // 顧客情報を取得（expandで展開済み）
-      const customerName = chargeInfo.customer && typeof chargeInfo.customer === 'object'
-        ? chargeInfo.customer.name
-        : "";
+      const customerName = getCustomerName(chargeInfo.customer);
 
       // 取引した商品名を取得
       let productName = "";
@@ -47,20 +45,10 @@ function outputChargeInfo() {
       return [...acc, infoList];
     }, []);
 
-    // 新規の取引情報がない場合、終了
-    if (outputInfoArray.length === 0) {
-      console.log("新しい取引情報はありません。");
-      return;
-    }
-
-    // 取引情報をシートに追加（シートの冒頭に追加）
-    outputSheet.insertRows(2, outputInfoArray.length);
-    outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
+    // 取引情報をシートに追加
+    outputToSheet(CONFIG.SHEETS.CHARGE, outputInfoArray);
   } catch(err) {
-    console.error(`エラー内容：${err.message}\nスタック：${err.stack}`);
-    const gasUrl = `https://script.google.com/u/0/home/projects/${ScriptApp.getScriptId()}/edit`;
-    SlackNotification.SendToSinlabSlack(`StripeControllerのoutputChargeInfo関数でエラーが発生しました。\n${err.message}\n${err.stack}\n\n${gasUrl}`, "通知担当", "テスト用");
-    throw err;  // トリガーの再試行を有効にするため
+    handleError(err, "outputChargeInfo");
   }
 }
 
@@ -69,7 +57,10 @@ function outputChargeInfo() {
  */
 const getProductNameByPaymentIntentId = (paymentIntentId) => {
   // Stripeサーバーからセッション情報を取得
-  const {data: sessionInfoList} = getStripeInfo(`https://api.stripe.com/v1/checkout/sessions?payment_intent=${paymentIntentId}`);
+  const url = buildStripeUrl(CONFIG.STRIPE_API.ENDPOINTS.CHECKOUT_SESSIONS, {
+    payment_intent: paymentIntentId
+  });
+  const {data: sessionInfoList} = getStripeInfo(url);
 
   // セッションが存在しない場合はスキップ
   if (sessionInfoList.length === 0) return "";
@@ -77,7 +68,8 @@ const getProductNameByPaymentIntentId = (paymentIntentId) => {
   const sessionInfo = sessionInfoList[0];
 
   // セッションIDから関連するline_itemsを取得
-  const {data: lineItemList} = getStripeInfo(`https://api.stripe.com/v1/checkout/sessions/${sessionInfo.id}/line_items`);
+  const lineItemsUrl = `${CONFIG.STRIPE_API.BASE_URL}${CONFIG.STRIPE_API.ENDPOINTS.CHECKOUT_SESSIONS}/${sessionInfo.id}/line_items`;
+  const {data: lineItemList} = getStripeInfo(lineItemsUrl);
 
   return lineItemList[0].description;
 }

@@ -3,41 +3,29 @@
  */
 function outputPaymentInfo() {
   try {
-    // Stripeサーバーから支払い情報を取得
-    const {data: paymentInfoList} = getStripeInfo("https://api.stripe.com/v1/payment_intents?limit=100");
+    // Stripeサーバーから支払い情報を取得（顧客情報もexpandで取得して効率化）
+    const url = buildStripeUrl(CONFIG.STRIPE_API.ENDPOINTS.PAYMENT_INTENTS, {
+      limit: CONFIG.STRIPE_LIMITS.PAYMENT,
+      'expand[]': 'data.customer'
+    });
+    const {data: paymentInfoList} = getStripeInfo(url);
 
-    // Stripeサーバーから顧客情報を取得
-    const { data: customerInfoList } = getStripeInfo("https://api.stripe.com/v1/customers?limit=100");
-
-    // 支払い情報シートの最新登録日を取得（B2セルの日付が最新）
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const outputSheet = ss.getSheetByName("支払い情報");
-    const latestDate = new Date(outputSheet.getRange(2, 2).getValue());
+    // 支払い情報シートの最新登録日を取得
+    const latestDate = getLatestDate(CONFIG.SHEETS.PAYMENT);
 
     // 支払い情報シートに未記載の支払い情報を抽出
     // 出力する情報：タイムスタンプ・ID・メールアドレス・説明文・金額・ステータス
     const outputInfoArray = paymentInfoList.reduce((acc, paymentInfo) => {
-      const createdDate = new Date(paymentInfo.created * 1000); // 取得日時をUNIX日時から変換
-      if (createdDate.getTime() <= latestDate.getTime()) return acc;
-      const targetCustomerInfo = customerInfoList.find((customerInfo) => customerInfo.id == paymentInfo.customer);
-      const customerName = targetCustomerInfo ? targetCustomerInfo.name : "";
+      const createdDate = unixToDate(paymentInfo.created);
+      if (createdDate.getTime() < latestDate.getTime()) return acc;
+      const customerName = getCustomerName(paymentInfo.customer);
       const infoList = [paymentInfo.id, createdDate, customerName, paymentInfo.calculated_statement_descriptor, paymentInfo.amount, paymentInfo.status];
       return [...acc, infoList];
     }, []);
 
-    // 新規の支払い情報がない場合、終了
-    if (outputInfoArray.length === 0) {
-      console.log("新しい支払い情報はありません。");
-      return;
-    }
-
-    // 支払い情報をシートに追加（シートの冒頭に追加）
-    outputSheet.insertRows(2, outputInfoArray.length);
-    outputSheet.getRange(2, 1, outputInfoArray.length, outputInfoArray[0].length).setValues(outputInfoArray);
+    // 支払い情報をシートに追加
+    outputToSheet(CONFIG.SHEETS.PAYMENT, outputInfoArray);
   } catch(err) {
-    console.error(`エラー内容：${err.message}\nスタック：${err.stack}`);
-    const gasUrl = `https://script.google.com/u/0/home/projects/${ScriptApp.getScriptId()}/edit`;
-    SlackNotification.SendToSinlabSlack(`StripeControllerのoutputPaymentInfo関数でエラーが発生しました。\n${err.message}\n${err.stack}\n\n${gasUrl}`, "通知担当", "テスト用");
-    throw err;
+    handleError(err, "outputPaymentInfo");
   }
 }

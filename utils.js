@@ -1,0 +1,80 @@
+/**
+ * 共通ユーティリティ関数
+ */
+
+/**
+ * スプレッドシートの指定シートから最新日付を取得
+ * @param {string} sheetName - シート名
+ * @return {Date} 最新日付
+ */
+function getLatestDate(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  return new Date(sheet.getRange(CONFIG.CELLS.LATEST_DATE_ROW, CONFIG.CELLS.LATEST_DATE_COLUMN).getValue());
+}
+
+/**
+ * スプレッドシートにデータを出力
+ * @param {string} sheetName - シート名
+ * @param {Array<Array>} dataArray - 出力するデータ配列
+ */
+function outputToSheet(sheetName, dataArray) {
+  if (dataArray.length === 0) {
+    console.log(`新しい${sheetName}はありません。`);
+    return;
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  sheet.insertRows(CONFIG.CELLS.INSERT_ROW, dataArray.length);
+  sheet.getRange(CONFIG.CELLS.INSERT_ROW, 1, dataArray.length, dataArray[0].length).setValues(dataArray);
+}
+
+/**
+ * UNIX時刻をDateオブジェクトに変換
+ * @param {number} unixTime - UNIX時刻（秒）
+ * @return {Date} Dateオブジェクト
+ */
+function unixToDate(unixTime) {
+  return new Date(unixTime * 1000);
+}
+
+/**
+ * 顧客名を取得（顧客情報が展開されている場合に対応）
+ * @param {Object|string} customer - 顧客オブジェクトまたは顧客ID
+ * @return {string} 顧客名
+ */
+function getCustomerName(customer) {
+  if (!customer) return "";
+  return typeof customer === 'object' ? (customer.name || "") : "";
+}
+
+/**
+ * 統一されたエラーハンドリング
+ * @param {Error} err - エラーオブジェクト
+ * @param {string} functionName - 関数名
+ */
+function handleError(err, functionName) {
+  console.error(`エラー内容：${err.message}\nスタック：${err.stack}`);
+  const gasUrl = `https://script.google.com/u/0/home/projects/${ScriptApp.getScriptId()}/edit`;
+  SlackNotification.SendToSinlabSlack(
+    `StripeControllerの${functionName}関数でエラーが発生しました。\n${err.message}\n${err.stack}\n\n${gasUrl}`,
+    CONFIG.SLACK.NOTIFICATION_USER,
+    CONFIG.SLACK.NOTIFICATION_CHANNEL
+  );
+  throw err;
+}
+
+/**
+ * Stripe APIのURLを構築
+ * @param {string} endpoint - エンドポイント
+ * @param {Object} params - クエリパラメータ
+ * @return {string} 完全なURL
+ */
+function buildStripeUrl(endpoint, params = {}) {
+  const url = CONFIG.STRIPE_API.BASE_URL + endpoint;
+  const queryParams = Object.keys(params)
+    .map(key => `${key}=${encodeURIComponent(params[key])}`)
+    .join('&');
+  return queryParams ? `${url}?${queryParams}` : url;
+}
